@@ -1,4 +1,4 @@
-# --- executable_invertedVFitting.py ---
+# --- executable.py ---
 # --- Author: C. Feltman ---
 # DESCRIPTION: performs fits on diffNFlux data for ACES-II, but can be modified for other fluxes
 
