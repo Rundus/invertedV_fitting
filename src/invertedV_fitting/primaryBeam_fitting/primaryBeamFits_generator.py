@@ -1,4 +1,4 @@
-# --- primaryBeamFits_Generator.py ---
+# --- primaryBeamFits_generator.py ---
 # --- Author: C. Feltman ---
 # DESCRIPTION: using the method outline in Kaeppler's thesis, we can fit inverted-V distributions
 # to get estimate the magnetospheric temperature, density and electrostatic potential that accelerated
@@ -11,8 +11,7 @@ import numpy as np
 # --- --- --- ---
 # --- IMPORTS ---
 # --- --- --- ---
-from src.physicsModels.invertedV_fitting.primaryBeam_fitting.primaryBeam_classes import *
-from src.physicsModels.invertedV_fitting.simToggles_invertedVFitting import GenToggles
+from src.invertedV_fitting.primaryBeam_fitting.primaryBeamFits_classes import *
 import spaceToolsLib as stl
 from time import time
 from scipy.optimize import curve_fit
@@ -44,10 +43,11 @@ def generatePrimaryBeamFit(primaryBeamToggles, outputFolder):
                  'V0': [[], {'DEPEND_0': 'Epoch', 'DEPEND_1':'Pitch_Angle','UNITS': 'eV', 'LABLAXIS': 'V0'}],
                  'kappa': [[], {'DEPEND_0': 'Epoch', 'DEPEND_1':'Pitch_Angle','UNITS': None, 'LABLAXIS': 'kappa'}],
                  'ChiSquare': [[], {'DEPEND_0': 'Epoch', 'UNITS': None, 'LABLAXIS': 'ChiSquare'}],
-                 'timestamp_fitData': [[], {'DEPEND_0': None, 'UNITS': 'cm^-2 str^-1 s^-1 ev^-1', 'LABLAXIS': 'V0'}],
+                 'Epoch': [[], {'DEPEND_0': None, 'UNITS': 'ns', 'LABLAXIS': 'V0'}],
                  'Fitted_Pitch_Angles': [primaryBeamToggles.wPitchsToFit, {'DEPEND_0': None, 'UNITS': 'deg', 'LABLAXIS': 'Fitted Pitch Angle'}],
                  'dataIdxs': [[], {'DEPEND_0': None, 'UNITS': None, 'LABLAXIS': 'Index'}], # indicies corresponding to the NON-ENERGY-REDUCED dataslice so as to re-construct the fit
                  'numFittedPoints': [[], {'DEPEND_0': None, 'UNITS': None, 'LABLAXIS': 'Number of Fitted Points'}],
+                'Pitch_Angle': deepcopy(data_dict_diffFlux['Pitch_Angle'])
                  }
 
     # --- NUMBER FLUX DISTRIBUTION FIT FUNCTION ---
@@ -134,44 +134,43 @@ def generatePrimaryBeamFit(primaryBeamToggles, outputFolder):
 
         return n0Guess
 
+
+    ################################
+    # --- PREPARE THE INPUT DATA ---
+    ################################
+    EpochFitData, IlatFitData, fitData, fitData_stdDev = helperFuncs().groupAverageData(data_dict_diffFlux=data_dict_diffFlux,
+                                                                              targetTimes=[data_dict_diffFlux['Epoch'][0][0], data_dict_diffFlux['Epoch'][0][-1]],
+                                                                              N_avg=primaryBeamToggles.numToAverageOver)
+
+    ############################
+    # --- PREPARE THE OUTPUT ---
+    ############################
+    # --- get the indicies to fit --
+    # description: get the indicies of the invertedV-times to fit from the EpochFitData
+    fit_idxs = []
+    for range_idx in primaryBeamToggles.wFit_times:
+        time_range = primaryBeamToggles.invertedV_times[range_idx]
+        low_idx, high_idx = np.abs(EpochFitData - time_range[0]).argmin(), np.abs(EpochFitData - time_range[1]).argmin()
+        fit_idxs.append([i for i in range(low_idx, high_idx + 1, 1)])
+    fit_idxs = np.array([val for sublist in fit_idxs for val in sublist])
+
+    data_dict_output['dataIdxs'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0]), len(data_dict_diffFlux['Energy'][0])))
+    data_dict_output['numFittedPoints'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
+    data_dict_output['Te'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
+    data_dict_output['n'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
+    data_dict_output['V0'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
+    data_dict_output['kappa'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
+    data_dict_output['ChiSquare'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
+    data_dict_output['Epoch'][0] = deepcopy(fit_idxs)
+    data_dict_output = {**data_dict_output, **{'ILat': [IlatFitData, deepcopy(data_dict_diffFlux['ILat'][1])]}}
+
+
     ##################################
     # --------------------------------
     # --- LOOP THROUGH DATA TO FIT ---
     # --------------------------------
     ##################################
     noiseData = helperFuncs().generateNoiseLevel(data_dict_diffFlux['Energy'][0], countNoiseLevel=primaryBeamToggles.countNoiseLevel)
-
-    EpochFitData, IlatFitData, fitData, fitData_stdDev = helperFuncs().groupAverageData(data_dict_diffFlux=data_dict_diffFlux,
-                                                                              targetTimes=[data_dict_diffFlux['Epoch'][0][0], data_dict_diffFlux['Epoch'][0][-1]],
-                                                                              N_avg=primaryBeamToggles.numToAverageOver)
-
-    data_dict_output['dataIdxs'][0] = np.zeros(shape = (len(EpochFitData), len(data_dict_diffFlux['Pitch_Angle'][0]), len(data_dict_diffFlux['Energy'][0])))
-    data_dict_output['numFittedPoints'][0] = np.zeros(shape=(len(EpochFitData), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['Te'][0] = np.zeros(shape=(len(EpochFitData), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['n'][0] = np.zeros(shape=(len(EpochFitData), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['V0'][0] = np.zeros(shape=(len(EpochFitData), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['kappa'][0] = np.zeros(shape=(len(EpochFitData), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['ChiSquare'][0] = np.zeros(shape=(len(EpochFitData), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['timestamp_fitData'][0] = deepcopy(EpochFitData)
-
-    data_dict_output ={**data_dict_output,
-                       **{'Pitch_Angle': deepcopy(data_dict_diffFlux['Pitch_Angle']),
-                          'Epoch': [EpochFitData, deepcopy(data_dict_diffFlux['Epoch'][1])],
-                          'ILat': [IlatFitData, deepcopy(data_dict_diffFlux['ILat'][1])]
-                          }
-                       }
-
-    # --- get the indicies to fit --
-    # description: get the indicies of the invertedV-times to fit from the EpochFitData
-    fit_these_ranges = []
-    for time_range in GenToggles.invertedV_times:
-        low_idx, high_idx = np.abs(EpochFitData - time_range[0]).argmin(),np.abs(EpochFitData - time_range[1]).argmin()
-        fit_these_ranges.append([i for i in range(low_idx,high_idx+1, 1)])
-    fit_these_ranges = np.array([val for sublist in fit_these_ranges for val in sublist])
-
-    ###################
-    # --- MAIN LOOP ---
-    ###################
     for loopIdx, pitchAngle in enumerate(primaryBeamToggles.wPitchsToFit):
         ####################################
         # --- FIT AVERAGED TIME SECTIONS ---
@@ -181,7 +180,7 @@ def generatePrimaryBeamFit(primaryBeamToggles, outputFolder):
         # Note: The peak in the number flux is very likely the maximum value AFTER 100 eV, just find this point
         pitchIdx = np.abs(data_dict_diffFlux['Pitch_Angle'][0] - pitchAngle).argmin()
 
-        for tmeIdx in tqdm(fit_these_ranges):
+        for tmeIdx in tqdm(fit_idxs):
             try: # try fit the data
                 # --- Determine the accelerated potential from the peak in diffNflux based on a threshold limit ---
                 engythresh_Idx = np.abs(data_dict_diffFlux['Energy'][0] - primaryBeamToggles.engy_Thresh).argmin()  # only consider data above a certain index
