@@ -1,59 +1,28 @@
 # --- executable.py ---
 # --- Author: C. Feltman ---
-# DESCRIPTION: performs fits on diffNFlux data for ACES-II, but can be modified for other fluxes
+# DESCRIPTION: performs fits on differential_number_flux data.
 
 
 #################
 # --- IMPORTS ---
 #################
-import time
-from data_paths import *
-import spaceToolsLib as stl
-start_time = time.time()
+from src.invertedV_fitting.executable_classes import ExecutableClasses
+from src.invertedV_fitting.executable_toggles import dict_executable
+
+# Generate the Configuration File for this run
+ExecutableClasses().generate_run_JSON()
+
+if dict_executable['regen_EVERYTHING']==1:
+    for key in dict_executable.keys():
+        dict_executable[key] = 1
+
+if dict_executable['fit_primary_beam']==1:
+    print('\n--- Fitting Primary Inverted-V Beam ---', end='\n')
+    from src.invertedV_fitting.fit_primary_beam.primary_beam_fit_generator import primary_beam_fit_generator
+    primary_beam_fit_generator()
 
 
-#################
-# --- TOGGLES ---
-#################
-primaryBeam_fitting = False
-primaryBeam_individualPlots = False
-primaryBeam_fitParamPlots = False
-backScatter_Calc = True
-backScatter_Plotting = False
-
-
-################################
-# --- --- --- --- --- --- --- --
-# --- ENVIRONMENT GENERATORS ---
-# --- --- --- --- --- --- --- --
-################################
-
-if primaryBeam_fitting:
-    stl.prgMsg('Generating Primary Beam Fit Parameters\n')
-    from src.invertedV_fitting.fit_primary_beam.primary_beam_fit_generator import generatePrimaryBeamFit
-    generatePrimaryBeamFit()
-    stl.Done(start_time)
-
-if primaryBeam_individualPlots:
-    stl.prgMsg('Plotting Primary Beam Fits\n')
-    from src.physicsModels.invertedV_fitting.primaryBeam_fitting.primaryBeamFits_Plotting import generatePrimaryBeamFitPlots
-    generatePrimaryBeamFitPlots()
-    stl.Done(start_time)
-
-if primaryBeam_fitParamPlots:
-    stl.prgMsg('Plotting Primary Beam Parameters\n')
-    from src.physicsModels.invertedV_fitting.primaryBeam_fitting.primaryBeamFits_Plotting import generatePrimaryBeamFitPlots
-    generatePrimaryBeamFitPlots()
-    stl.Done(start_time)
-
-if backScatter_Calc:
-    stl.prgMsg('Generating Secondary/Backscatter Data\n')
-    from src.physicsModels.invertedV_fitting.backScatter.backScatter_Generator import generateSecondaryBackScatter
+if dict_executable['calculate_backscatter']==1:
+    print('\n--- Calculating Beam Backscatter ---', end='\n')
+    from src.invertedV_fitting.backscatter.backscatter_generator import generateSecondaryBackScatter
     generateSecondaryBackScatter()
-    stl.Done(start_time)
-
-if backScatter_Plotting:
-    stl.prgMsg('Plotting backscatter Beam Fits')
-    from src.physicsModels.invertedV_fitting.backScatter.plotting.backScatter_Plotting import generateBackScatterPlots
-    generateBackScatterPlots()
-    stl.Done(start_time)

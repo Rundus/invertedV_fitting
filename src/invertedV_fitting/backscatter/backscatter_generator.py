@@ -1,4 +1,4 @@
-# --- backScatter_Generator.py ---
+# --- backscatter_generator.py ---
 # --- Author: C. Feltman ---
 # DESCRIPTION: Take in the primary data fits and produce secondary/backscatter curves for each. Use the
 # parameterized Evans 1964 curves to determine the curves.

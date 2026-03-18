@@ -3,172 +3,66 @@
 # DESCRIPTION: using the method outline in Kaeppler's thesis, we can fit inverted-V distributions
 # to get estimate the magnetospheric temperature, density and electrostatic potential that accelerated
 # our particles
-import numpy as np
 
-# TODO: Re-work the fitting code to also work if the "Maxwellian" option is selected
-# TODO: Perform fits on ACES-I Kaeppler data to compare results of methods!
+# TODO: Implement Time-averaging into fit routine
 
-# --- --- --- ---
-# --- IMPORTS ---
-# --- --- --- ---
-from src.invertedV_fitting.fit_primary_beam.primaryBeamFits_classes import *
-import spaceToolsLib as stl
-from time import time
-from scipy.optimize import curve_fit
-from copy import deepcopy
-from tqdm import tqdm
-from scipy.integrate import simpson
-from scipy.special import gamma
-import warnings
-warnings.filterwarnings("ignore")
-start_time = time()
-# --- --- --- --- ---
+from timebudget import timebudget
 
-def generatePrimaryBeamFit(primaryBeamToggles, outputFolder):
+@timebudget
+def primary_beam_fit_generator():
 
-    ##########################
-    # --- --- --- --- --- ---
-    # --- LOADING THE DATA ---
-    # --- --- --- --- --- ---
-    ##########################
-    data_dict_diffFlux = stl.loadDictFromFile(inputFilePath=primaryBeamToggles.inputDataPath,
-                                              wKeys_Reduce=['Differential_Energy_Flux',
-                                                            'Differential_Number_Flux',
-                                                            'Epoch',
-                                                            'Differential_Number_Flux_stdDev'])
+    # --- imports ---
+    import spaceToolsLib as stl
+    import numpy as np
+    from tqdm import tqdm
+    from copy import deepcopy
+    from glob import glob
+    from src.invertedV_fitting.user_toggles.user_toggles import UserToggles
 
-    # --- prepare the output data_dict_output ---
-    data_dict_output = {'Te': [[], {'DEPEND_0': 'Epoch', 'DEPEND_1':'Pitch_Angle',  'UNITS': 'eV', 'LABLAXIS': 'Te'}],
-                 'n': [[], {'DEPEND_0': 'Epoch', 'DEPEND_1':'Pitch_Angle','UNITS': 'cm!A-3!N', 'LABLAXIS': 'ne'}],
-                 'V0': [[], {'DEPEND_0': 'Epoch', 'DEPEND_1':'Pitch_Angle','UNITS': 'eV', 'LABLAXIS': 'V0'}],
-                 'kappa': [[], {'DEPEND_0': 'Epoch', 'DEPEND_1':'Pitch_Angle','UNITS': None, 'LABLAXIS': 'kappa'}],
-                 'ChiSquare': [[], {'DEPEND_0': 'Epoch', 'UNITS': None, 'LABLAXIS': 'ChiSquare'}],
-                 'Epoch': [[], {'DEPEND_0': None, 'UNITS': 'ns', 'LABLAXIS': 'V0'}],
-                 'Fitted_Pitch_Angles': [primaryBeamToggles.wPitchsToFit, {'DEPEND_0': None, 'UNITS': 'deg', 'LABLAXIS': 'Fitted Pitch Angle'}],
-                 'dataIdxs': [[], {'DEPEND_0': None, 'UNITS': None, 'LABLAXIS': 'Index'}], # indicies corresponding to the NON-ENERGY-REDUCED dataslice so as to re-construct the fit
-                 'numFittedPoints': [[], {'DEPEND_0': None, 'UNITS': None, 'LABLAXIS': 'Number of Fitted Points'}],
-                'Pitch_Angle': deepcopy(data_dict_diffFlux['Pitch_Angle'])
+
+    # --- prepare the output ---
+    data_dict_output = {
+                'Te': [[], {'DEPEND_0': f'{UserToggles.Epoch_key}', 'DEPEND_1':f'{UserToggles.pitch_angle_key}',  'UNITS': 'eV', 'LABLAXIS': 'Te'}],
+                 'n': [[], {'DEPEND_0': f'{UserToggles.Epoch_key}', 'DEPEND_1':f'{UserToggles.pitch_angle_key}','UNITS': 'cm!A-3!N', 'LABLAXIS': 'ne'}],
+                 'phi0': [[], {'DEPEND_0': f'{UserToggles.Epoch_key}', 'DEPEND_1':f'{UserToggles.pitch_angle_key}','UNITS': 'eV', 'LABLAXIS': '%phi;!B0!N'}],
+                 'kappa': [[], {'DEPEND_0': f'{UserToggles.Epoch_key}', 'DEPEND_1':f'{UserToggles.pitch_angle_key}','UNITS': None, 'LABLAXIS': '&kappa;'}],
+                 'chi2': [[], {'DEPEND_0': f'{UserToggles.Epoch_key}', 'UNITS': None, 'LABLAXIS': '&chi;!A^2!N'}],
+                 f'{UserToggles.Epoch_key}': [[], {'DEPEND_0': None, 'UNITS': 'ns', 'LABLAXIS': '&phi;0'}],
+                 'N_fitted_points': [[], {'DEPEND_0': None, 'UNITS': None, 'LABLAXIS': 'Number of Fitted Points'}],
                  }
 
-    # --- NUMBER FLUX DISTRIBUTION FIT FUNCTION ---
-    def fitPrimaryBeam(xData, yData, stdDevs, V0_guess, primaryBeamToggles, **kwargs):
-
-        # define the bound values
-        boundVals = [primaryBeamToggles.n_bounds, primaryBeamToggles.Te_bounds,
-                     [(1 - primaryBeamToggles.V0_deviation) * V0_guess,
-                      (1 + primaryBeamToggles.V0_deviation) * V0_guess]]
-
-        # define the guess
-        p0guess = [primaryBeamToggles.n_guess, primaryBeamToggles.T_guess, V0_guess]  # construct the guess
-
-        # define the fit function with specific charge/mass
-        if primaryBeamToggles.wDistributionToFit == 'Maxwellian':
-            fitFunc = primaryBeam_class().diffNFlux_fitFunc_Maxwellian
-
-        elif primaryBeamToggles.wDistributionToFit == 'Kappa':
-            fitFunc = primaryBeam_class().diffNFlux_fitFunc_Kappa
-            boundVals.append(primaryBeamToggles.kappa_bounds)
-            p0guess.append(primaryBeamToggles.kappa_guess) # construct the guess
-
-        # modify the boundVals if specified
-        if kwargs.get('specifyBoundVals', []) != []:
-            boundVals = kwargs.get('specifyBoundVals', [])
-
-        # modify the guess if specified
-        if kwargs.get('specifyGuess', []) != []:
-            p0guess = kwargs.get('specifyGuess', [])
-
-        # format the bounds
-        bounds = tuple([[boundVals[i][0] for i in range(len(boundVals))], [boundVals[i][1] for i in range(len(boundVals))]])
-
-        #########################
-        # --- PERFORM THE FIT ---
-        #########################
-        if len(yData) > 0:
-
-            if kwargs.get('useNoGuess',False):
-                params, cov = curve_fit(fitFunc, xData, yData, maxfev=primaryBeamToggles.maxfev, bounds=bounds)
-            else:
-                # --- fit the data ---
-                params, cov = curve_fit(fitFunc, xData, yData, maxfev=primaryBeamToggles.maxfev, bounds=bounds, p0=p0guess)
-
-            # --- calculate the Chi Square ---
-            ChiSquare = (1 / (len(params) - 1)) * sum([(fitFunc(xData[i], *params) - yData[i]) ** 2 / (stdDevs[i] ** 2) for i in range(len(xData))])
-
-            return params, ChiSquare
-        else:
-            return [np.NaN for i in range(len(boundVals))],np.NaN
-
-    def n0GuessKaeppler2014(jN, firstFitParams, peakDiffNIdx, beta, energyRange):
-        '''
-        :param jN: 2D array of averaged diffNFlux data for a single time slice from pitch angles -10deg to 190 deg
-        :param firstFitParams: 1D array with format [n0_guess, T_guess, V0_guess, kappa_guess]
-        :param beta: scalar ratio of Bmax/Bmin
-        :return:
-        n0Guess: scalar value
-        '''
-
-        # clean up data before integration
-        jN[jN < 0] = np.NaN
-        jN[np.where(np.isnan(jN) == True)] = 0
-
-        # only get pitch angles 0 to 90deg and reformat the data into [energy, pitch angles]
-        jN = jN[1:10+1, :].T
-
-        # --- integrate jN over parallel pitch angles ---
-        pitchRange = np.radians([0 + 10*i for i in range(10)])
-        jN_pitch = np.array([np.cos(pitchRange)*np.sin(pitchRange)*jN[engyIdx] for engyIdx in range(len(jN))])
-        varPhi_E_parallel = 2*np.pi*np.array([simpson(x=pitchRange, y=arr) for arr in jN_pitch])
-
-        # --- integrate varPhi_E over the BEAM energy range ---
-        beamEnergies = energyRange[:peakDiffNIdx+1]
-        beamFlux = varPhi_E_parallel[:peakDiffNIdx+1]
-        numberFlux = -1*simpson(x=beamEnergies, y=beamFlux) # multiply by -1 b/c I'm integrating over high-to-low energies
-
-        # calculate the n0Guess
-        Te = firstFitParams[1]
-        kappa = firstFitParams[3]
-        V0 = energyRange[peakDiffNIdx]
-        Akappa = (stl.cm_to_m)*(beta/2) *np.sqrt((stl.q0*Te*(2*kappa-3))/(np.pi*stl.m_e)) * (gamma(kappa + 1) / ( kappa*(kappa-1)*gamma(kappa-0.5))) # multiplied by 100 to convert to cm/s for unit matching
-        n0Guess = numberFlux/(Akappa - Akappa*(1 - 1/beta)*np.power(1 + V0/(Te*(kappa-3/2)*(beta-1)),-(kappa-1))    )
-
-        return n0Guess
-
+    ###############################
+    # --- LOADING THE FLUX DATA ---
+    ###############################
+    data_dict_flux = stl.loadDictFromFile(glob(UserToggles.path_to_eESA_data)[0])
+    epoch = data_dict_flux[f'{UserToggles.Epoch_key}'][0]
+    energy = data_dict_flux[f'{UserToggles.energy_key}'][0]
+    pitch_angle = data_dict_flux[f'{UserToggles.pitch_angle_key}'][0]
+    diffEFlux = data_dict_flux[f'{UserToggles.differential_energy_flux_key}'][0]
+    diffNFlux = np.divide(deepcopy(diffEFlux),energy,axis=UserToggles.dependency_structure.index(UserToggles.energy_key))
 
     ################################
     # --- PREPARE THE INPUT DATA ---
     ################################
-    EpochFitData, IlatFitData, fitData, fitData_stdDev = helperFuncs().groupAverageData(data_dict_diffFlux=data_dict_diffFlux,
-                                                                              targetTimes=[data_dict_diffFlux['Epoch'][0][0], data_dict_diffFlux['Epoch'][0][-1]],
-                                                                              N_avg=primaryBeamToggles.numToAverageOver)
 
-    ############################
-    # --- PREPARE THE OUTPUT ---
-    ############################
-    # --- get the indicies to fit --
-    # description: get the indicies of the invertedV-times to fit from the EpochFitData
-    fit_idxs = []
-    for range_idx in primaryBeamToggles.wFit_times:
-        time_range = primaryBeamToggles.invertedV_times[range_idx]
-        low_idx, high_idx = np.abs(EpochFitData - time_range[0]).argmin(), np.abs(EpochFitData - time_range[1]).argmin()
-        fit_idxs.append([i for i in range(low_idx, high_idx + 1, 1)])
-    fit_idxs = np.array([val for sublist in fit_idxs for val in sublist])
+    # [1] Average the data over the desired pitch angle range
+    dependency_indices = []
+    for i in range(len(UserToggles.dependency_structure)):
+        if 'epoch' in UserToggles.dependency_structure[i]:
+            dependency_indices.append([i for i in range(len(epoch))])
+        elif 'energy' in UserToggles.dependency_structure[i]:
+            dependency_indices.append([i for i in range(len(energy))])
+        elif 'pitch' in UserToggles.dependency_structure[i]:
+            dependency_indices.append([i for i in range(len(pitch_angle)) if pitch_angle[i] in UserToggles.pitch_angles_to_fit])
 
-    data_dict_output['dataIdxs'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0]), len(data_dict_diffFlux['Energy'][0])))
-    data_dict_output['numFittedPoints'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['Te'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['n'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['V0'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['kappa'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['ChiSquare'][0] = np.zeros(shape=(len(fit_idxs), len(data_dict_diffFlux['Pitch_Angle'][0])))
-    data_dict_output['Epoch'][0] = deepcopy(fit_idxs)
-    data_dict_output = {**data_dict_output, **{'ILat': [IlatFitData, deepcopy(data_dict_diffFlux['ILat'][1])]}}
+    diffNFlux_ptchAvg = np.nanmean(diffNFlux[*dependency_indices], axis=UserToggles.dependency_structure.index(UserToggles.pitch_angle_key))
+
+    # [2] Average the data over the desired time range with the cadence desired
+    diffNFlux_tmeAvg = diffNFlux_ptchAvg
 
 
     ##################################
-    # --------------------------------
     # --- LOOP THROUGH DATA TO FIT ---
-    # --------------------------------
     ##################################
     noiseData = helperFuncs().generateNoiseLevel(data_dict_diffFlux['Energy'][0], countNoiseLevel=primaryBeamToggles.countNoiseLevel)
     for loopIdx, pitchAngle in enumerate(primaryBeamToggles.wPitchsToFit):
