@@ -1,4 +1,4 @@
-# --- primaryBeamFits_generator.py ---
+# --- primary_beam_fit_generator.py ---
 # --- Author: C. Feltman ---
 # DESCRIPTION: using the method outline in Kaeppler's thesis, we can fit inverted-V distributions
 # to get estimate the magnetospheric temperature, density and electrostatic potential that accelerated
@@ -11,7 +11,7 @@ import numpy as np
 # --- --- --- ---
 # --- IMPORTS ---
 # --- --- --- ---
-from src.invertedV_fitting.primaryBeam_fitting.primaryBeamFits_classes import *
+from src.invertedV_fitting.fit_primary_beam.primaryBeamFits_classes import *
 import spaceToolsLib as stl
 from time import time
 from scipy.optimize import curve_fit

@@ -7,7 +7,7 @@
 # --- IMPORTS ---
 #################
 import time
-from fileIO_toggles import *
+from data_paths import *
 import spaceToolsLib as stl
 start_time = time.time()
 
@@ -30,7 +30,7 @@ backScatter_Plotting = False
 
 if primaryBeam_fitting:
     stl.prgMsg('Generating Primary Beam Fit Parameters\n')
-    from src.invertedV_fitting.primaryBeam_fitting.primaryBeamFits_generator import generatePrimaryBeamFit
+    from src.invertedV_fitting.fit_primary_beam.primary_beam_fit_generator import generatePrimaryBeamFit
     generatePrimaryBeamFit()
     stl.Done(start_time)
 
@@ -53,7 +53,7 @@ if backScatter_Calc:
     stl.Done(start_time)
 
 if backScatter_Plotting:
-    stl.prgMsg('Plotting backScatter Beam Fits')
+    stl.prgMsg('Plotting backscatter Beam Fits')
     from src.physicsModels.invertedV_fitting.backScatter.plotting.backScatter_Plotting import generateBackScatterPlots
     generateBackScatterPlots()
     stl.Done(start_time)

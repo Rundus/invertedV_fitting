@@ -154,10 +154,11 @@ class distributions_class:
         Emag = (0.5 * mass * (Vperp ** 2 + Vpara ** 2)) / charge
         Ek = T*(1 - 3/(2*kappa))
         return (1E6)*n * np.power(mass/(2*np.pi*kappa*stl.q0*Ek),3/2) * (gamma(kappa+1)/gamma(kappa-0.5)) * np.power(1 + Emag/(kappa*Ek),-(kappa +1))
+
 class primaryBeam_class:
 
     # --- FUNCTION for fitting ---
-    def diffNFlux_fitFunc_Maxwellian(self, x, n, T, V):  # Used in primaryBeam_fitting
+    def diffNFlux_fitFunc_Maxwellian(self, x, n, T, V):  # Used in fit_primary_beam
         '''
         :param x: scalar energy on the BEAM energy grid [eV]
         :param n: plasma density [cm^-3]
@@ -180,7 +181,7 @@ class primaryBeam_class:
 
         return diffNFlux_converted
 
-    def diffNFlux_fitFunc_Kappa(self, x, n, T, V, kappa):  # Used in primaryBeam_fitting
+    def diffNFlux_fitFunc_Kappa(self, x, n, T, V, kappa):  # Used in fit_primary_beam
         '''
         :param x: scalar - energy on the BEAM energy grid [eV]
         :param n: scalar - plasma density [cm^-3]
