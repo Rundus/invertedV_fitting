@@ -24,7 +24,7 @@ class UserToggles:
     # data keys for this mission - TRACERS
     differential_number_flux_key = None
     differential_energy_flux_key = 'ts2_l3_ace_pitch_def'
-    counts_key = 'ts2_l3_ace_pitch_counts'
+    counts_key = 'ts2_l3_ace_pitch_background_counts'
     Epoch_key = 'Epoch'
     pitch_angle_key = 'ts2_l3_ace_pitch_angle'
     energy_key = 'ts2_l3_ace_energy'

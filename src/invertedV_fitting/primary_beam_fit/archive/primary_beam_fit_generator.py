@@ -168,7 +168,6 @@ def primary_beam_fit_generator(primaryBeamToggles, outputFolder):
     data_dict_output['Epoch'][0] = deepcopy(fit_idxs)
     data_dict_output = {**data_dict_output, **{'ILat': [IlatFitData, deepcopy(data_dict_diffFlux['ILat'][1])]}}
 
-
     ##################################
     # --------------------------------
     # --- LOOP THROUGH DATA TO FIT ---

@@ -3,7 +3,7 @@
 class PrimaryBeamToggles:
 
     # --- FIT DATA COLLECTION ---
-    pitch_angles_to_fit = [5, 15, 25]  # in degrees
+    pitch_angles_to_fit = [45, 55, 65]  # in degrees
     energy_thesh = 100  # in [eV]. The energy to start searching above for  electrostatic potentials
 
     #########################
@@ -12,6 +12,7 @@ class PrimaryBeamToggles:
 
     # General Fit
     fit_dist = 'maxwellian' # options: 'kappa', 'maxwellian'
+    # fit_dist = 'kappa'  # options: 'kappa', 'maxwellian'
     countNoiseLevel = 2
     maxfev = int(1E3)  # number of iterations the LM fit is allowed
 

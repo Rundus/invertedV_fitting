@@ -5,7 +5,7 @@ import numpy as np
 
 from src.invertedV_fitting.primary_beam_fit.primary_beam_fit_toggles import PrimaryBeamToggles
 from src.invertedV_fitting.plotting.primary_beam_plots.plot_primary_beam_fits_toggles import PlotPrimaryBeamFitsToggles
-from src.invertedV_fitting.plotting.primary_beam_plots.plot_primary_beam_fits_classes import PlotPrimaryBeamClasses
+from src.invertedV_fitting.primary_beam_fit.primary_beam_fit_classes import PrimaryBeamClasses
 
 
 def plot_primary_beam_fits_generator():
@@ -26,7 +26,8 @@ def plot_primary_beam_fits_generator():
     ###########################
     data_dict_beamFits = stl.loadDictFromFile(f'{UserToggles.run_folder_path}/primary_beam_fit.cdf')
     diffNFlux = data_dict_beamFits['diffNFlux'][0]
-    counts_std = data_dict_beamFits['diffNFlux'][0]
+    counts = data_dict_beamFits['counts'][0]
+    counts_std = data_dict_beamFits['counts_std'][0]
     epoch = deepcopy(data_dict_beamFits[f'{UserToggles.Epoch_key}'][0])
     energy = deepcopy(data_dict_beamFits['Energy'][0])
     pitch_angle = deepcopy(data_dict_beamFits['pitch_angle'][0])
@@ -58,9 +59,16 @@ def plot_primary_beam_fits_generator():
             f'{epoch[tmeIdx]} UTC' +'\n'
         )
 
-        # Raw Data
-        ax.scatter(energy, diffNFlux[tmeIdx])
-        ax.plot(energy, diffNFlux[tmeIdx])
+        # Raw Data - with error bars
+        try:
+            error = PrimaryBeamClasses().calc_jN_error(counts_val=counts[tmeIdx], energy_value=energy, pitch_angles=pitch_angle)
+            yerr = [ np.clip(diffNFlux[tmeIdx]-error,min=0), np.clip(diffNFlux[tmeIdx]+error,min=0)]
+            ax.plot(energy,diffNFlux[tmeIdx],zorder=0)
+            # ax.errorbar(x=energy, y=diffNFlux[tmeIdx], yerr=yerr, capsize=4, color='tab:blue',zorder=0)
+        except Exception as e:
+            print(diffNFlux[tmeIdx]-error)
+
+        ax.scatter(energy, diffNFlux[tmeIdx], zorder=0)
 
         # plot the phi0 guess
         phi0_guess = data_dict_beamFits['phi'][0][tmeIdx]
@@ -83,15 +91,16 @@ def plot_primary_beam_fits_generator():
             yData_plot = fit_func(xData_plot, *params)
 
             # (c) Plot the fitted data
-            legend_label = r'n$_{0}$ = ' + f'{round(params[0],2)}' +'cm$^{-3}$\n' + r'T$_{e}$ = ' + f'{round(params[1],2)} eV\n' + r'$\phi_{0}$ = ' + f'{round(params[2],2)} eV\n'
+            # legend_label = r'n$_{0}$ = ' + f'{round(params[0],2)}' +'cm$^{-3}$\n' + r'T$_{e}$ = ' + f'{round(params[1],2)} eV\n' + r'$\phi_{0}$ = ' + f'{round(params[2],2)} eV\n' + r'$\chi^{2}$ = ' + f'{round(data_dict_beamFits['chi2'][0][tmeIdx],3)}'
+            legend_label = r'n$_{0}$ = ' + f'{round(params[0], 2)}' + 'cm$^{-3}$\n' + r'T$_{e}$ = ' + f'{round(params[1], 2)} eV\n' + r'$\phi_{0}$ = ' + f'{round(params[2], 2)} eV\n' + r'$\chi^{2}$ = '
             if PrimaryBeamToggles.fit_dist == 'kappa':
                 legend_label += r'$\kappa$ = ' + f'{round(params[3],2)}\n'
 
-            ax.plot(xData_plot, yData_plot, color='red', label=legend_label)
+            ax.plot(xData_plot, yData_plot, color='red', label=legend_label,zorder=1)
 
 
         # add the baseline counts level
-        noise_level = PlotPrimaryBeamClasses().calc_noise_level(counts_level= PlotPrimaryBeamFitsToggles.counts_level,
+        noise_level = PrimaryBeamClasses().calc_noise_level(counts_level= PlotPrimaryBeamFitsToggles.counts_level,
                                                                 energy_value=energy,
                                                                 pitch_angles=pitch_angle)
         ax.plot(energy, noise_level ,color='black', label=f'{PlotPrimaryBeamFitsToggles.counts_level}-count noise')
@@ -101,8 +110,7 @@ def plot_primary_beam_fits_generator():
         ax.set_xlabel('Energy [eV]')
         ax.set_yscale('log')
         ax.set_xscale('log')
-        ax.set_ylim(1E2, 5E6)
-        ax.set_xlim(1E1, 1E4)
+        ax.set_ylim(1E3, 1E7)
         ax.legend()
 
         # Save the plot

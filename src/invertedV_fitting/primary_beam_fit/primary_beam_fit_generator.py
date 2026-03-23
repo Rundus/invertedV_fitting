@@ -55,16 +55,18 @@ def primary_beam_fit_generator():
             dependency_indices[wIdx] =[i for i in range(len(pitch_angle)) if pitch_angle[i] in PrimaryBeamToggles.pitch_angles_to_fit]
 
     diffNFlux_ptchAvg = np.nanmean(diffNFlux[*np.ix_(*dependency_indices)], axis=UserToggles.dependency_structure.index(UserToggles.pitch_angle_key))
-    counts_ptchAvg = np.nanmean(counts[*np.ix_(*dependency_indices)], axis=UserToggles.dependency_structure.index(UserToggles.pitch_angle_key))
+    counts_ptchAvg = np.round(np.nanmean(counts[*np.ix_(*dependency_indices)], axis=UserToggles.dependency_structure.index(UserToggles.pitch_angle_key)))
 
     # [2] Average the data over the desired time range with the cadence desired
     low_idx, high_idx = np.abs(epoch - UserToggles.datetime_low).argmin(),np.abs(epoch-UserToggles.datetime_high).argmin()
     diffNFlux_tmeAvg = deepcopy(diffNFlux_ptchAvg)[low_idx:high_idx+1]
     counts_tmeAvg = deepcopy(counts_ptchAvg)[low_idx:high_idx+1]
+    counts_tmeAvg[counts_tmeAvg<0] = 0
 
     # [3] Determine the error in each counts measurement
     # Note: the error in the averaged counts is: deltaN = (1/Num_of_ptchs_avged) * sqrt(N_ptch0 + N_ptch1 + ...) for a given time/energy
-    counts_stdDev = (1/len(PrimaryBeamToggles.pitch_angles_to_fit))*np.sqrt(np.nansum(counts[*np.ix_(*dependency_indices)], axis=UserToggles.dependency_structure.index(UserToggles.pitch_angle_key))).round()[low_idx:high_idx+1]
+    # counts_stdDev = (1/len(PrimaryBeamToggles.pitch_angles_to_fit))*np.sqrt(np.nansum(counts[*np.ix_(*dependency_indices)], axis=UserToggles.dependency_structure.index(UserToggles.pitch_angle_key))).round()[low_idx:high_idx+1]
+    counts_stdDev = np.sqrt(counts_tmeAvg)
 
 
     #################################
@@ -118,7 +120,8 @@ def primary_beam_fit_generator():
             params, cov = curve_fit(fit_func, xData_fit, yData_fit, **kwargs_dict)
 
             # (b) Calculate Chi2
-            # chi2 = (1 / (len(params) - 1)) * sum([(fit_func(xData[i], *params) - yData[i]) ** 2 / (stdDevs[i] ** 2) for i in range(len(xData))])
+            std_devs = PrimaryBeamClasses().calc_jN_error(counts_val=counts_tmeAvg[tmeIdx][:phi0_guess_idx+1], energy_value=xData_fit, pitch_angles=pitch_angle)
+            chi2 = (1 / (len(params) - 1)) * sum([(fit_func(xData_fit[i], *params) - yData_fit[i]) ** 2 / (std_devs[i] ** 2) for i in range(len(xData_fit))])
 
             # [4] Refine the fit using the kaeppler method
 
@@ -128,11 +131,12 @@ def primary_beam_fit_generator():
             data_dict_output['Te'][0][tmeIdx] = params[1]
             data_dict_output['phi'][0][tmeIdx] = params[2]
             data_dict_output['kappa'][0][tmeIdx] = np.nan if PrimaryBeamToggles.fit_dist == 'maxwellian' else params[3]
-            data_dict_output['chi2'][0][tmeIdx] = np.nan
+            data_dict_output['chi2'][0][tmeIdx] = chi2
             data_dict_output['N_fitted_points'][0][tmeIdx] = len(yData_fit)
             data_dict_output['find_fit_data_engy_idx'][0][tmeIdx] = phi0_guess_idx
 
-        except:
+        except Exception as e:
+            print(e)
             # --- update the data_dict_output ---
             data_dict_output['Te'][0][tmeIdx] = np.nan
             data_dict_output['n'][0][tmeIdx]= np.nan

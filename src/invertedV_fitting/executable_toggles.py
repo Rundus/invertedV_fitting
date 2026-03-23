@@ -6,7 +6,7 @@
 
 dict_executable = {
     'regen_EVERYTHING': 0,
-    'primary_beam_fit': 0,
+    'primary_beam_fit': 1,
     'plot_primary_beam_fits': 1,
     'calculate_backscatter': 0,
 }
