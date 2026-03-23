@@ -18,6 +18,9 @@ def primary_beam_fit_generator():
     from copy import deepcopy
     from glob import glob
     from src.invertedV_fitting.user_toggles.user_toggles import UserToggles
+    from src.invertedV_fitting.fit_primary_beam.primary_beam_fit_toggles import PrimaryBeamToggles
+    from src.invertedV_fitting.fit_primary_beam.primary_beam_fit_classes import PrimaryBeamClasses
+    from scipy.optimize import curve_fit
 
 
     ###############################
@@ -73,7 +76,7 @@ def primary_beam_fit_generator():
     # --- LOOP THROUGH DATA TO FIT ---
     ##################################
 
-    for tmeIdx in range(len(diffNFlux_tmeAvg)):
+    for tmeIdx in tqdm(range(len(diffNFlux_tmeAvg))):
 
         try:
 
@@ -92,23 +95,35 @@ def primary_beam_fit_generator():
             xData_fit = xData[:phi0_guess_idx+1]
             yData_fit = yData[:phi0_guess_idx+1]
 
-            # (b) remove bad data/zero points
+            # (b) Form the guesses/boundaries
+            fit_func, kwargs_dict = PrimaryBeamClasses().form_fit_params(phi0_guess)
 
-            # [3] Fit the data
-            # (a) form the guesses
-            # (b) perform the fit
+            # [3] Marquart-Levenburg Fitting
+            # (a) Fit the data
+            params, cov = curve_fit(fit_func, xData_fit, yData_fit, **kwargs_dict)
+
+            # (b) Calculate Chi2
+            # chi2 = (1 / (len(params) - 1)) * sum([(fit_func(xData[i], *params) - yData[i]) ** 2 / (stdDevs[i] ** 2) for i in range(len(xData))])
 
             # [4] Refine the fit using the kaeppler method
+
+            # [5] Store the results
+            # --- update the data_dict_output ---
+            data_dict_output['n'][0][tmeIdx] = params[0]
+            data_dict_output['Te'][0][tmeIdx] = params[1]
+            data_dict_output['phi0'][0][tmeIdx] = params[2]
+            data_dict_output['kappa'][0][tmeIdx] = np.nan if PrimaryBeamToggles.fit_dist == 'maxwellian' else params[3]
+            data_dict_output['chi2'][0][tmeIdx] = np.nan
+            data_dict_output['N_fitted_points'][0][tmeIdx] = len(yData_fit)
 
         except:
             # --- update the data_dict_output ---
             data_dict_output['Te'][0][tmeIdx] = np.nan
             data_dict_output['n'][0][tmeIdx]= np.nan
-            data_dict_output['V0'][0][tmeIdx] = np.nan
+            data_dict_output['phi0'][0][tmeIdx] = np.nan
             data_dict_output['kappa'][0][tmeIdx] = np.nan
-            data_dict_output['ChiSquare'][0][tmeIdx] = np.nan
-            data_dict_output['dataIdxs'][0][tmeIdx] = np.nan
-            data_dict_output['numFittedPoints'][0][tmeIdx] = np.nan
+            data_dict_output['chi2'][0][tmeIdx] = np.nan
+            data_dict_output['N_fitted_points'][0][tmeIdx] = np.nan
 
     # --- --- --- --- --- ---
     # --- OUTPUT THE DATA ---

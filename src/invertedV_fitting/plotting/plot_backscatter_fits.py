@@ -1,4 +1,4 @@
-# --- backScatter_Plotting.py ---
+# --- plot_backscatter_fits.py ---
 # --- Author: C. Feltman ---
 # DESCRIPTION: get the data from the backscatter Curves and plot the data WITHOUT regenerating all the curves again
 
