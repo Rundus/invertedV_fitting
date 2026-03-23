@@ -158,7 +158,7 @@ class distributions_class:
 class primaryBeam_class:
 
     # --- FUNCTION for fitting ---
-    def diffNFlux_fitFunc_Maxwellian(self, x, n, T, V):  # Used in fit_primary_beam
+    def diffNFlux_fitFunc_Maxwellian(self, x, n, T, V):  # Used in primary_beam_fit
         '''
         :param x: scalar energy on the BEAM energy grid [eV]
         :param n: plasma density [cm^-3]
@@ -181,7 +181,7 @@ class primaryBeam_class:
 
         return diffNFlux_converted
 
-    def diffNFlux_fitFunc_Kappa(self, x, n, T, V, kappa):  # Used in fit_primary_beam
+    def diffNFlux_fitFunc_Kappa(self, x, n, T, V, kappa):  # Used in primary_beam_fit
         '''
         :param x: scalar - energy on the BEAM energy grid [eV]
         :param n: scalar - plasma density [cm^-3]

@@ -3,8 +3,8 @@
 class PrimaryBeamToggles:
 
     # --- FIT DATA COLLECTION ---
-    engy_Thresh = 120  # minimum allowable energy of the inverted-V potential
-    wPitchsToFit = [10, 20, 30]  # give pitch angles in degrees
+    pitch_angles_to_fit = [5, 15, 25]  # in degrees
+    energy_thesh = 100  # in [eV]. The energy to start searching above for  electrostatic potentials
 
     #########################
     # --- FITTING TOGGLES ---

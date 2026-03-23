@@ -1,13 +1,13 @@
 # --- model_primaryBeam_classes --
 import spaceToolsLib as stl
 import numpy as np
-from src.invertedV_fitting.fit_primary_beam.primary_beam_fit_toggles import PrimaryBeamToggles
+from src.invertedV_fitting.primary_beam_fit.primary_beam_fit_toggles import PrimaryBeamToggles
 from scipy.special import gamma
 
 
 class PrimaryBeamClasses:
 
-    def form_fit_params(self, phi0_guess):
+    def form_fit_params(self, phi0_guess, **kwargs):
 
         # form the guesses list
         guesses = [PrimaryBeamToggles.n0_guess, PrimaryBeamToggles.T0_guess, phi0_guess]
@@ -36,7 +36,7 @@ class PrimaryBeamClasses:
         return fit_func, kwargs_dict
 
     # --- FUNCTION for fitting ---
-    def diffNFlux_fitFunc_Maxwellian(self, x, n, T, V):  # Used in fit_primary_beam
+    def diffNFlux_fitFunc_Maxwellian(self, x, n, T, V):  # Used in primary_beam_fit
         '''
         :param x: scalar energy on the BEAM energy grid [eV]
         :param n: plasma density [cm^-3]
@@ -59,7 +59,7 @@ class PrimaryBeamClasses:
 
         return diffNFlux_converted
 
-    def diffNFlux_fitFunc_Kappa(self, x, n, T, V, kappa):  # Used in fit_primary_beam
+    def diffNFlux_fitFunc_Kappa(self, x, n, T, V, kappa):  # Used in primary_beam_fit
         '''
         :param x: scalar - energy on the BEAM energy grid [eV]
         :param n: scalar - plasma density [cm^-3]

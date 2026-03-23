@@ -1,6 +1,6 @@
 # --- betaFit.py ---
 # --- Author: C. Feltman ---
-# DESCRIPTION: using the data from fit_primary_beam we can generate distributions at various altitudes
+# DESCRIPTION: using the data from primary_beam_fit we can generate distributions at various altitudes
 # to see which height our data most closely matches to
 
 # --- --- --- ---
