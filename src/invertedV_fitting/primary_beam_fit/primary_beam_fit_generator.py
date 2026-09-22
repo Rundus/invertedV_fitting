@@ -4,8 +4,6 @@
 # to get estimate the magnetospheric temperature, density and electrostatic potential that accelerated
 # our particles
 
-# TODO: Implement Time-averaging into fit routine
-
 from timebudget import timebudget
 
 @timebudget
@@ -15,83 +13,96 @@ def primary_beam_fit_generator():
     import spaceToolsLib as stl
     import numpy as np
     from tqdm import tqdm
-    from copy import deepcopy
     from glob import glob
-    from src.invertedV_fitting.user_toggles.user_toggles import UserToggles
-    from src.invertedV_fitting.primary_beam_fit.primary_beam_fit_toggles import PrimaryBeamToggles
-    from src.invertedV_fitting.primary_beam_fit.primary_beam_fit_classes import PrimaryBeamClasses
+    from src.invertedV_fitting.user_toggles import FitDataToggles,PrimaryBeamFitToggles, FileToggles
     from scipy.optimize import curve_fit
-
+    import datetime as dt
 
     ###############################
     # --- LOADING THE FLUX DATA ---
     ###############################
-    data_dict_flux = stl.loadDictFromFile(glob(UserToggles.path_to_eESA_flux_data)[0])
-    data_dict_counts = stl.loadDictFromFile(glob(UserToggles.path_to_eESA_counts_data)[0])
-    epoch = deepcopy(data_dict_flux[f'{UserToggles.Epoch_key}'][0])
-    energy = deepcopy(data_dict_flux[f'{UserToggles.energy_key}'][0])
-    pitch_angle = deepcopy(data_dict_flux[f'{UserToggles.pitch_angle_key}'][0])
+    data_dict = stl.loadDictFromFile(glob(FitDataToggles.path_to_eESA_flux_data)[0])
+    epoch = data_dict[f'{FitDataToggles.epoch_key}'][0]
+    energy = data_dict[f'{FitDataToggles.energy_key}'][0]
+    pitch_angle = data_dict[f'{FitDataToggles.pitch_angle_key}'][0]
 
-    diffEFlux = deepcopy(data_dict_flux[f'{UserToggles.differential_energy_flux_key}'][0])
-    diffEFlux[diffEFlux<0] = 0
-    diffNFlux = np.array([np.divide(diffEFlux[tmeIdx].T,energy).T for tmeIdx in range(len(epoch)) ])
+    # Clean up the diffEFlux data
+    diffEFlux = data_dict[f'{FitDataToggles.differential_energy_flux_key}'][0]
 
-    counts = deepcopy(data_dict_counts[f'{UserToggles.counts_key}'][0])
-    counts[counts<0] = 0
+    # Clean up the Counts Data
+    counts = data_dict[f'{FitDataToggles.counts_key}'][0]
 
-    ################################
-    # --- PREPARE THE INPUT DATA ---
-    ################################
+    # Calculate diffNFlux
+    diffNFlux = np.array([np.divide(diffEFlux[tmeIdx].T, energy).T for tmeIdx in range(len(epoch))])
 
-    # [1] Average the data over the desired pitch angle range
+    ######################################
+    # --- PREPARE THE DATA FOR FITTING ---
+    ######################################
+
+    # --- [0] REDUCE THE DATA TO THE FIT REGION ---
+    low_idx, high_idx = np.abs(epoch - PrimaryBeamFitToggles.datetime_low).argmin(), np.abs(epoch - PrimaryBeamFitToggles.datetime_high).argmin()
+    epoch = epoch[low_idx:high_idx + 1]
+    fit_data = [counts, diffNFlux, diffEFlux]
+    fit_data = [thing[low_idx:high_idx + 1] for thing in fit_data]
+
+    # --- [1] Remove bad values in the data ---
+    fit_data[1][fit_data[1] < 0] = 0 # mask diffNFlux <0
+    fit_data[0][fit_data[0] < 0] = 0 # mask counts <0
+
+
+    # --- [2] Average the data over the desired pitch angle range ---
     dependency_indices = [[],[],[]]
-    for i in range(len(UserToggles.dependency_structure)):
-        wIdx = UserToggles.dependency_structure.index(UserToggles.dependency_structure[i])
-        if 'epoch' in UserToggles.dependency_structure[i].lower():
+    for i in range(len(FitDataToggles.dependency_structure)):
+        wIdx = FitDataToggles.dependency_structure.index(FitDataToggles.dependency_structure[i])
+        if 'epoch' in FitDataToggles.dependency_structure[i].lower():
             dependency_indices[wIdx] =[i for i in range(len(epoch))]
-        elif 'energy' in UserToggles.dependency_structure[i].lower():
+        elif 'energy' in FitDataToggles.dependency_structure[i].lower():
             dependency_indices[wIdx] =[i for i in range(len(energy))]
-        elif 'pitch' in UserToggles.dependency_structure[i].lower():
-            dependency_indices[wIdx] =[i for i in range(len(pitch_angle)) if pitch_angle[i] in PrimaryBeamToggles.pitch_angles_to_fit]
+        elif 'pitch' in FitDataToggles.dependency_structure[i].lower():
+            dependency_indices[wIdx] =[i for i in range(len(pitch_angle)) if pitch_angle[i] in PrimaryBeamFitToggles.pitch_angles_to_fit]
 
-    diffNFlux_ptchAvg = np.nanmean(diffNFlux[*np.ix_(*dependency_indices)], axis=UserToggles.dependency_structure.index(UserToggles.pitch_angle_key))
-    counts_ptchAvg = np.round(np.nanmean(counts[*np.ix_(*dependency_indices)], axis=UserToggles.dependency_structure.index(UserToggles.pitch_angle_key)))
+    diffNFlux_ptch_avg = np.nanmean(fit_data[1][*np.ix_(*dependency_indices)], axis=FitDataToggles.dependency_structure.index(FitDataToggles.pitch_angle_key))
+    counts_ptch_avg = np.round(np.nanmean(fit_data[0][*np.ix_(*dependency_indices)], axis=FitDataToggles.dependency_structure.index(FitDataToggles.pitch_angle_key)))
 
-    # [2] Average the data over the desired time range with the cadence desired
-    low_idx, high_idx = np.abs(epoch - UserToggles.datetime_low).argmin(),np.abs(epoch-UserToggles.datetime_high).argmin()
-    diffNFlux_tmeAvg = deepcopy(diffNFlux_ptchAvg)[low_idx:high_idx+1]
-    counts_tmeAvg = deepcopy(counts_ptchAvg)[low_idx:high_idx+1]
+    # --- [3] Average the data over the desired time range with the cadence desired ---
+    fitting_window = [
+                        dt.datetime(int(FileToggles.data_year), int(FileToggles.data_month), int(FileToggles.data_day), PrimaryBeamFitToggles.start_hour, PrimaryBeamFitToggles.start_minute),
+        dt.datetime(int(FileToggles.data_year), int(FileToggles.data_month), int(FileToggles.data_day),
+                    PrimaryBeamFitToggles.start_hour, PrimaryBeamFitToggles.start_minute),
+                      ]
+    low_idx, high_idx = np.abs(epoch - fitting_window[0]).argmin(),np.abs(epoch-fitting_window[0]).argmin()
+    diffNFlux_tmeAvg = diffNFlux_ptch_avg[low_idx:high_idx+1]
+    counts_tmeAvg = counts_ptch_avg[low_idx:high_idx+1]
     counts_tmeAvg[counts_tmeAvg<0] = 0
 
-    # [3] Determine the error in each counts measurement
+    # --- [4] Determine the error in each counts measurement ---
     # Note: the error in the averaged counts is: deltaN = (1/Num_of_ptchs_avged) * sqrt(N_ptch0 + N_ptch1 + ...) for a given time/energy
     # counts_stdDev = (1/len(PrimaryBeamToggles.pitch_angles_to_fit))*np.sqrt(np.nansum(counts[*np.ix_(*dependency_indices)], axis=UserToggles.dependency_structure.index(UserToggles.pitch_angle_key))).round()[low_idx:high_idx+1]
     counts_stdDev = np.sqrt(counts_tmeAvg)
 
-
-    #################################
-    # --- PREPARE THE OUTPUT DATA ---
-    #################################
+    ######################################
+    # --- PREPARE THE OUTPUT DATA DICT ---
+    ######################################
 
     data_dict_output = {
-        'Epoch': [epoch[low_idx:high_idx+1],deepcopy(data_dict_flux[f'{UserToggles.Epoch_key}'][1])],
-        'Te': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': f'{UserToggles.Epoch_key}', 'DEPEND_1': f'{UserToggles.pitch_angle_key}', 'UNITS': 'eV', 'LABLAXIS': 'Te'}],
-        'n': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': f'{UserToggles.Epoch_key}', 'DEPEND_1': f'{UserToggles.pitch_angle_key}', 'UNITS': 'cm!A-3!N', 'LABLAXIS': 'ne'}],
-        'phi': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': f'{UserToggles.Epoch_key}', 'DEPEND_1': f'{UserToggles.pitch_angle_key}', 'UNITS': 'eV', 'LABLAXIS': '&phi;!B0!N'}],
-        'kappa': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': f'{UserToggles.Epoch_key}', 'DEPEND_1': f'{UserToggles.pitch_angle_key}', 'UNITS': None, 'LABLAXIS': '&kappa;'}],
-        'chi2': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': f'{UserToggles.Epoch_key}', 'UNITS': None, 'LABLAXIS': '&chi;!A^2!N'}],
-        'N_fitted_points': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': None, 'UNITS': None, 'LABLAXIS': 'Number of Fitted Points'}],
-        'diffNFlux':[diffNFlux_tmeAvg,{'DEPEND_0':'Epoch','DEPEND_1':'Energy','UNITS':'1/cm^2-str-s-eV'}],
-        'counts_std': [counts_stdDev, {'DEPEND_0': 'Epoch', 'DEPEND_1': 'Energy','UNITS':'counts'}],
-        'counts': [counts_tmeAvg, {'DEPEND_0': 'Epoch', 'DEPEND_1': 'Energy', 'UNITS': 'counts'}],
-        'pitch_angle':deepcopy(data_dict_flux[f'{UserToggles.pitch_angle_key}']),
-        'Energy':deepcopy(data_dict_flux[f'{UserToggles.energy_key}']),
-        'find_fit_data_engy_idx' : [np.zeros(len(diffNFlux_tmeAvg)),{}]
+        f'{FitDataToggles.epoch_key}': [epoch[low_idx:high_idx+1],data_dict[f'{FitDataToggles.epoch_key}'][1].copy()],
+        'Te': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': f'{FitDataToggles.epoch_key}', 'DEPEND_1': f'{FitDataToggles.pitch_angle_key}', 'UNITS': 'eV', 'LABLAXIS': 'Te'}],
+        'n': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': f'{FitDataToggles.epoch_key}', 'DEPEND_1': f'{FitDataToggles.pitch_angle_key}', 'UNITS': 'cm!A-3!N', 'LABLAXIS': 'ne'}],
+        'phi': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': f'{FitDataToggles.epoch_key}', 'DEPEND_1': f'{FitDataToggles.pitch_angle_key}', 'UNITS': 'eV', 'LABLAXIS': '&phi;!B0!N'}],
+        'kappa': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': f'{FitDataToggles.epoch_key}', 'DEPEND_1': f'{FitDataToggles.pitch_angle_key}', 'UNITS': None, 'LABLAXIS': '&kappa;'}],
+        'chi2_goodness_of_fit': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': f'{FitDataToggles.epoch_key}', 'UNITS': None, 'LABLAXIS': '&chi;!A^2!N'}],
+        'fitted_N_points': [np.zeros(len(diffNFlux_tmeAvg)), {'DEPEND_0': None, 'UNITS': None, 'LABLAXIS': 'Number of Fitted Points'}],
+        'fitted_diffNFlux':[diffNFlux_tmeAvg,{'DEPEND_0':'Epoch','DEPEND_1':'Energy','UNITS':'1/cm^2-str-s-eV'}],
+        'fitted_counts_std': [counts_stdDev, {'DEPEND_0': 'Epoch', 'DEPEND_1': 'Energy','UNITS':'counts'}],
+        'fitted_counts': [counts_tmeAvg, {'DEPEND_0': 'Epoch', 'DEPEND_1': 'Energy', 'UNITS': 'counts'}],
+        f'{FitDataToggles.pitch_angle_key}':data_dict[f'{FitDataToggles.pitch_angle_key}'],
+        f'{FitDataToggles.energy_key}':data_dict[f'{FitDataToggles.energy_key}'],
+        'find_fit_data_engy_idx' : [np.zeros(len(diffNFlux_tmeAvg)),{}],
     }
 
-    ##################################
-    # --- LOOP THROUGH DATA TO FIT ---
-    ##################################
+    ########################################
+    # --- PERFORM THE INVERTED-V FITTING ---
+    ########################################
 
     for tmeIdx in tqdm(range(len(diffNFlux_tmeAvg))):
 
@@ -100,9 +111,9 @@ def primary_beam_fit_generator():
             diffNFlux_slice = diffNFlux_tmeAvg[tmeIdx]
 
             # [1] find the acceleration potential from the peak in diffNFlux above an energy threshold
-            engy_thresh_idx = np.abs(energy-PrimaryBeamToggles.energy_thesh).argmin()
-            xData = energy[:engy_thresh_idx+1] if UserToggles.energy_bin_direction == 0 else energy[engy_thresh_idx:]
-            yData = diffNFlux_slice[:engy_thresh_idx+1] if UserToggles.energy_bin_direction == 0 else diffNFlux_slice[engy_thresh_idx:]
+            engy_thresh_idx = np.abs(energy-PrimaryBeamFitToggles.energy_thesh).argmin()
+            xData = energy[:engy_thresh_idx+1] if PrimaryBeamFitToggles.energy_bin_direction == 0 else energy[engy_thresh_idx:]
+            yData = diffNFlux_slice[:engy_thresh_idx+1] if PrimaryBeamFitToggles.energy_bin_direction == 0 else diffNFlux_slice[engy_thresh_idx:]
 
             phi0_guess_idx = yData.argmax()
             phi0_guess = xData[yData.argmax()]
@@ -148,5 +159,5 @@ def primary_beam_fit_generator():
     # --- --- --- --- --- ---
     # --- OUTPUT THE DATA ---
     # --- --- --- --- --- ---
-    outputPath = rf'{UserToggles.run_folder_path}/primary_beam_fit.cdf'
+    outputPath = rf'{FileToggles.RUN_PATH}/primary_beam_fits/primary_beam_fit_{}_to_{}.cdf'
     stl.outputDataDict(outputPath=outputPath,data_dict=data_dict_output)

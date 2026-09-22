@@ -1,53 +1,50 @@
 # --- model_primaryBeam_classes --
 import spaceToolsLib as stl
-import numpy as np
-from src.invertedV_fitting.primary_beam_fit.primary_beam_fit_toggles import PrimaryBeamToggles
 from scipy.special import gamma
-from src.invertedV_fitting.user_toggles.user_toggles import UserToggles
-from src.invertedV_fitting.primary_beam_fit.primary_beam_fit_toggles import PrimaryBeamToggles
 import numpy as np
+from src.invertedV_fitting.user_toggles import PrimaryBeamFitToggles
 
 class PrimaryBeamClasses:
 
     def calc_noise_level(self, counts_level, energy_value, pitch_angles):
 
         # (1) average the geofactors over the pitch range
-        avg_indicies = [i for i in range(len(pitch_angles)) if pitch_angles[i] in PrimaryBeamToggles.pitch_angles_to_fit]
-        geo_factor_avg = np.mean(np.array(UserToggles.geoFactor)[avg_indicies])
+        avg_indicies = [i for i in range(len(pitch_angles)) if pitch_angles[i] in PrimaryBeamFitToggles.pitch_angles_to_fit]
+        geo_factor_avg = np.mean(np.array(PrimaryBeamFitToggles.geoFactor)[avg_indicies])
 
-        return counts_level/(geo_factor_avg*(UserToggles.integration_time - UserToggles.deadtime*counts_level)*energy_value)
+        return counts_level/(geo_factor_avg*(PrimaryBeamFitToggles.integration_time - PrimaryBeamFitToggles.deadtime*counts_level)*energy_value)
 
     def calc_jN_error(self, counts_val,energy_value, pitch_angles):
         # (1) average the geofactors over the pitch range
-        avg_indicies = [i for i in range(len(pitch_angles)) if pitch_angles[i] in PrimaryBeamToggles.pitch_angles_to_fit]
-        geo_factor_avg = np.mean(np.array(UserToggles.geoFactor)[avg_indicies])
+        avg_indicies = [i for i in range(len(pitch_angles)) if pitch_angles[i] in PrimaryBeamFitToggles.pitch_angles_to_fit]
+        geo_factor_avg = np.mean(np.array(PrimaryBeamFitToggles.geoFactor)[avg_indicies])
 
-        return np.sqrt(counts_val) / (geo_factor_avg * UserToggles.integration_time * energy_value)
+        return np.sqrt(counts_val) / (geo_factor_avg * PrimaryBeamFitToggles.integration_time * energy_value)
 
     def form_fit_params(self, phi0_guess, **kwargs):
 
         # form the guesses list
-        guesses = [PrimaryBeamToggles.n0_guess, PrimaryBeamToggles.T0_guess, phi0_guess]
+        guesses = [PrimaryBeamFitToggles.n0_guess, PrimaryBeamFitToggles.T0_guess, phi0_guess]
 
         # form the boundaries dictionary
-        fit_param_boundaries = [PrimaryBeamToggles.n_bounds, PrimaryBeamToggles.Te_bounds, [(1 - PrimaryBeamToggles.phi0_deviation) * phi0_guess, (1 + PrimaryBeamToggles.phi0_deviation) * phi0_guess]]
+        fit_param_boundaries = [PrimaryBeamFitToggles.n_bounds, PrimaryBeamFitToggles.Te_bounds, [(1 - PrimaryBeamFitToggles.phi0_deviation) * phi0_guess, (1 + PrimaryBeamFitToggles.phi0_deviation) * phi0_guess]]
 
-        if PrimaryBeamToggles.fit_dist == 'kappa':
-            guesses += [PrimaryBeamToggles.kappa0_guess]
-            fit_param_boundaries += [PrimaryBeamToggles.kappa_bounds]
+        if PrimaryBeamFitToggles.fit_dist == 'kappa':
+            guesses += [PrimaryBeamFitToggles.kappa0_guess]
+            fit_param_boundaries += [PrimaryBeamFitToggles.kappa_bounds]
 
         fit_param_boundaries = tuple(np.array(fit_param_boundaries).T)
 
         # determine the fitting function
-        fit_func = self.diffNFlux_fitFunc_Kappa if PrimaryBeamToggles.fit_dist == 'kappa' else self.diffNFlux_fitFunc_Maxwellian
+        fit_func = self.diffNFlux_fitFunc_Kappa if PrimaryBeamFitToggles.fit_dist == 'kappa' else self.diffNFlux_fitFunc_Maxwellian
 
         # form the fitting parameters
         kwargs_dict = {
-            'maxfev': PrimaryBeamToggles.maxfev,
+            'maxfev': PrimaryBeamFitToggles.maxfev,
             'bounds':fit_param_boundaries
         }
 
-        if PrimaryBeamToggles.use_guess_bool:
+        if PrimaryBeamFitToggles.use_guess_bool:
             kwargs_dict['p0'] = guesses
 
         return fit_func, kwargs_dict
