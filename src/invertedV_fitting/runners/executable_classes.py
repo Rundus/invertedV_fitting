@@ -89,7 +89,7 @@ class ExecutableClasses:
         if len(data_files) == 0:
 
             if FileToggles.mission_name == 'TRACERS':
-                print('Fit Files not found.')
+                print('Data Files not found.')
 
                 # Download the ACE data and store it
                 self.retrieve_ace_data(year=FileToggles.data_year,
@@ -101,7 +101,7 @@ class ExecutableClasses:
             elif FileToggles.mission_name == 'ACESII':
                 raise Exception('Need to Implement ACESII Code!')
         else:
-            print(f'Local Fit Data Found! {data_files[0]}')
+            print(f'Data Found! {data_files[0]}')
 
     def generate_run_JSON(self, filename='run_config.json'):
         """
