@@ -13,6 +13,7 @@ class PrimaryBeamClasses:
         self.epoch = epoch
         self.energy = energy
         self.pitch_angle = pitch_angle
+        self.geometric_factors = FitDataToggles.geoFactor
 
     def standardize_flux_array(self, spectra, axis_hint=None):
         """
@@ -300,7 +301,6 @@ class PrimaryBeamClasses:
 
         return A_spectra, epoch_avg
 
-
     def calc_noise_level(self, counts_level, energy_value, pitch_angles):
 
         # (1) average the geofactors over the pitch range
@@ -309,12 +309,10 @@ class PrimaryBeamClasses:
 
         return counts_level/(geo_factor_avg*(PrimaryBeamFitToggles.integration_time - PrimaryBeamFitToggles.deadtime*counts_level)*energy_value)
 
-    def calc_jN_error(self, counts_val,energy_value, pitch_angles):
-        # (1) average the geofactors over the pitch range
-        avg_indicies = [i for i in range(len(pitch_angles)) if pitch_angles[i] in PrimaryBeamFitToggles.pitch_angles_to_fit]
-        geo_factor_avg = np.mean(np.array(PrimaryBeamFitToggles.geoFactor)[avg_indicies])
-
-        return np.sqrt(counts_val) / (geo_factor_avg * PrimaryBeamFitToggles.integration_time * energy_value)
+    def calc_jN_error(self, fit_counts, fit_energies, pitch_idx):
+        deltaTs = np.array([FitDataToggles.integration_time for i in range(len(fit_counts))]) - fit_counts*FitDataToggles.deadtime
+        geo_factor_avg = self.geometric_factors[pitch_idx]
+        return np.sqrt(fit_counts) / (geo_factor_avg * deltaTs * fit_energies)
 
     def form_fit_params(self, phi0_guess, **kwargs):
 

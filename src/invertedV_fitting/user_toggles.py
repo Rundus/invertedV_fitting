@@ -9,9 +9,9 @@ class FileToggles:
     mission_name = 'TRACERS'  # mission name. Used to build RUN_PATH
     instr_name = 'ACE'  # instrument name. Used to build RUN_PATH
     data_year = '2026'  # [YYYY] year of the data
-    data_month = '03'  # [MM] month of the data
-    data_day = '1'  # day of the month of the data
-    data_level = 'l3'  # data processing level of the input file
+    data_month = '04'  # [MM] month of the data
+    data_day = '01'  # [DD] day of the month of the data
+    data_level = 'l3'  # [l#] data processing level of the input file
     payload_designator = '2'  # TRACERS spacecraft number (1 or 2), i.e. ts1 or ts2
 
     # --- Program File I/O ---
@@ -34,7 +34,7 @@ class FitDataToggles:
 
     # --- Instrument Characteristics ---
     # [cm^2 sr eV/eV] geometric factor for each pitch-angle bin, ordered to match pitch_angle_key
-    geoFactor = [1.067e-04,
+    geoFactor = np.array([1.067e-04,
                  1.264e-04,
                  1.248e-04,
                  1.221e-04,
@@ -54,7 +54,7 @@ class FitDataToggles:
                  1.276e-04,
                  1.533e-04,
                  1.920e-04,
-                 1.335e-04]
+                 1.335e-04])
     deadtime = 80E-9  # [s] detector dead time
     integration_time = 0.9E-3  # [s] accumulation time for each energy bin
 
@@ -63,14 +63,16 @@ class PrimaryBeamFitToggles:
 
     # --- Fit Data Region Definition ---
     # window of data which is fitted. Anything outside of this region is not fit
-    start_hour = '16'  # [UTC] hour at which the fit window starts
-    start_minute = '00'  # [UTC] minute at which the fit window starts
-    end_hour = '16'  # [UTC] hour at which the fit window ends
-    end_minute = '20'  # [UTC] minute at which the fit window ends
+    start_hour = '03'  # [UTC] hour at which the fit window starts
+    start_minute = '08'  # [UTC] minute at which the fit window starts
+    start_second = '59'
+    end_hour = '03'  # [UTC] hour at which the fit window ends
+    end_minute = '09'  # [UTC] minute at which the fit window ends
+    end_second = '01'
     N_time_avg = 1  # number of time-slices to average together. Done sequentially.
 
     # --- FIT DATA COLLECTION ---
-    pitch_angles_to_fit = [[5,15],[25,25],[35]]  # [degrees], If multiple pitch angles are to be averaged together put them in brackets, e.g. [[pitch1, pitch2,pitch3], [pitch,4],...] will average pitches 1 to 3, then fit whereas [pitch4] will only fit pitch 4.
+    pitch_angles_to_fit = [[5],[15],[25]]  # [degrees], If multiple pitch angles are to be averaged together put them in brackets, e.g. [[pitch1, pitch2,pitch3], [pitch,4],...] will average pitches 1 to 3, then fit whereas [pitch4] will only fit pitch 4.
     energy_thesh = 100  # in [eV]. The energy to start searching above for electrostatic potentials
 
     # --- Inverted-V Fit Parameters (Marquardt-Levenberg) ---
@@ -78,6 +80,7 @@ class PrimaryBeamFitToggles:
     fit_dist = 'maxwellian'  # options: 'kappa', 'maxwellian'. Distribution function fit to the primary beam
     countNoiseLevel = 2  # [counts] bins at or below this count level are treated as noise and excluded from the fit
     maxfev = int(1E3)  # maximum number of function evaluations the LM fit is allowed
+    N_fit_min = 3 # MINIMUM number of points each fit must have
 
     # guesses
     use_guess_bool = True  # use an initial guess for the fit

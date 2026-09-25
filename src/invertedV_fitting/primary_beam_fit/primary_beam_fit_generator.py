@@ -48,8 +48,8 @@ def primary_beam_fit_generator():
 
     # --- [0] REDUCE THE DATA TO THE FIT REGION ---
     fit_window = [
-        dt.datetime(int(FileToggles.data_year), int(FileToggles.data_month), int(FileToggles.data_day), int(PrimaryBeamFitToggles.start_hour), int(PrimaryBeamFitToggles.start_minute)),
-        dt.datetime(int(FileToggles.data_year), int(FileToggles.data_month), int(FileToggles.data_day), int(PrimaryBeamFitToggles.end_hour), int(PrimaryBeamFitToggles.end_minute)),
+        dt.datetime(int(FileToggles.data_year), int(FileToggles.data_month), int(FileToggles.data_day), int(PrimaryBeamFitToggles.start_hour), int(PrimaryBeamFitToggles.start_minute),int(PrimaryBeamFitToggles.start_second)),
+        dt.datetime(int(FileToggles.data_year), int(FileToggles.data_month), int(FileToggles.data_day), int(PrimaryBeamFitToggles.end_hour), int(PrimaryBeamFitToggles.end_minute),int(PrimaryBeamFitToggles.end_second)),
     ]
     low_idx, high_idx = np.abs(epoch - fit_window[0]).argmin(), np.abs(epoch - fit_window[1]).argmin()
     fit_data = [thing[low_idx:high_idx + 1] for thing in fit_data]
@@ -65,9 +65,9 @@ def primary_beam_fit_generator():
         fit_data[i] = fit_obj.pitch_average(fit_data[i],groups=PrimaryBeamFitToggles.pitch_angles_to_fit)
 
         # --- [3] Average the data over the desired time range with the cadence desired ---
-        spectra_tme_avg,epoch_avg = fit_obj.time_average(fit_data[i],n_avg=PrimaryBeamFitToggles.N_time_avg)
+        spectra_tme_avg, epoch_avg = fit_obj.time_average(fit_data[i],n_avg=PrimaryBeamFitToggles.N_time_avg)
         fit_data[i] = spectra_tme_avg
-        epoch = epoch_avg
+        fit_obj.epoch = epoch_avg
 
         # --- [4] Determine the error in each counts measurement ---
         fit_data[i][fit_data[i]<1] = 0 # clamp all values less than 1 to zero.
@@ -75,21 +75,28 @@ def primary_beam_fit_generator():
     # Note: the error in the averaged counts is: deltaN = (1/Num_of_ptchs_avged) * sqrt(N_ptch0 + N_ptch1 + ...) for a given time/energy
     counts_error = np.sqrt(fit_data[0])
 
+    # Average the desired geometric factors together
+    ptch_idxs = np.array([[int(np.abs(pitch_angle - val).argmin()) for val in arr] for arr in PrimaryBeamFitToggles.pitch_angles_to_fit])
+    geoFactor_avg = np.nanmean([FitDataToggles.geoFactor[idxs] for idxs in ptch_idxs],axis=1)
+    fit_obj.geometric_factors = geoFactor_avg
+
+
     ######################################
     # --- PREPARE THE OUTPUT DATA DICT ---
     ######################################
+    output_shape = np.zeros_like(fit_data[0][:,0,:]) # Shape (N_epoch, M_fitted_pitch)
 
     data_dict_output = {
-        # 'Te': [np.zeros(len(fit_data[0])), {'DEPEND_0': f'{FitDataToggles.epoch_key}', 'DEPEND_1': f'{FitDataToggles.pitch_angle_key}', 'UNITS': 'eV', 'LABLAXIS': 'Te'}],
-        # 'n': [np.zeros(len(fit_data[0])), {'DEPEND_0': f'{FitDataToggles.epoch_key}', 'DEPEND_1': f'{FitDataToggles.pitch_angle_key}', 'UNITS': 'cm!A-3!N', 'LABLAXIS': 'ne'}],
-        # 'phi': [np.zeros(len(fit_data[0])), {'DEPEND_0': f'{FitDataToggles.epoch_key}', 'DEPEND_1': f'{FitDataToggles.pitch_angle_key}', 'UNITS': 'eV', 'LABLAXIS': '&phi;!B0!N'}],
-        # 'kappa': [np.zeros(len(fit_data[0])), {'DEPEND_0': f'{FitDataToggles.epoch_key}', 'DEPEND_1': f'{FitDataToggles.pitch_angle_key}', 'UNITS': None, 'LABLAXIS': '&kappa;'}],
-        # 'chi2_goodness_of_fit': [np.zeros(len(fit_data[0])), {'DEPEND_0': f'{FitDataToggles.epoch_key}', 'UNITS': None, 'LABLAXIS': '&chi;!A^2!N'}],
-        # 'find_fit_data_engy_idx': [np.zeros(len(diffNFlux_tmeAvg)), {}],
-        # 'fitted_N_points': [np.zeros(len(fit_data[0])), {'DEPEND_0': None, 'UNITS': None, 'LABLAXIS': 'Number of Fitted Points'}],
-        'fitted_diffNFlux':[fit_data[1],{'DEPEND_0': 'epoch','DEPEND_1': 'pitch_angle','DEPEND_2': 'energy','UNITS':'1/cm^2-sr-s-eV'}],
-        'fitted_counts_error': [counts_error, {'DEPEND_0': 'epoch','DEPEND_1': 'pitch_angle','DEPEND_2': 'energy'}],
-        'fitted_counts': [fit_data[0], {'DEPEND_0': 'epoch','DEPEND_1': 'pitch_angle','DEPEND_2': 'energy', 'UNITS': 'counts'}],
+        'Te': [output_shape.copy(), {'DEPEND_0': 'epoch', 'DEPEND_1': 'pitch_angle', 'UNITS': 'eV', 'LABLAXIS': 'Te'}],
+        'n': [output_shape.copy(), {'DEPEND_0': 'epoch', 'DEPEND_1': 'pitch_angle', 'UNITS': 'cm!A-3!N', 'LABLAXIS': 'ne'}],
+        'phi': [output_shape.copy(), {'DEPEND_0': 'epoch', 'DEPEND_1': 'pitch_angle', 'UNITS': 'eV', 'LABLAXIS': '&Phi;!B0!N'}],
+        'chi2_goodness_of_fit': [output_shape.copy(), {'DEPEND_0': 'epoch', 'DEPEND_1': 'pitch_angle', 'UNITS': None, 'LABLAXIS': '&chi;!A2!N'}],
+        'fitted_N_points': [output_shape.copy(), {'DEPEND_0': 'epoch', 'DEPEND_1': 'pitch_angle', 'LABLAXIS': 'Number of Fitted Points'}],
+        'kappa': [output_shape.copy(), {'DEPEND_0': 'epoch', 'DEPEND_1': 'pitch_angle', 'UNITS': None, 'LABLAXIS': '&kappa;'}],
+        'fitted_diffNFlux':[fit_data[1],{'DEPEND_0': 'epoch','DEPEND_2': 'pitch_angle','DEPEND_1': 'energy','UNITS':'1/cm^2-sr-s-eV'}],
+        'fitted_diffNFlux_error': [output_shape, {'DEPEND_0': 'epoch', 'DEPEND_2': 'pitch_angle', 'DEPEND_1': 'energy', 'UNITS': '1/cm^2-sr-s-eV'}],
+        'fitted_counts_error': [np.zeros_like(fit_data[0]), {'DEPEND_0': 'epoch','DEPEND_2': 'pitch_angle','DEPEND_1': 'energy'}],
+        'fitted_counts': [fit_data[0], {'DEPEND_0': 'epoch','DEPEND_2': 'pitch_angle','DEPEND_1': 'energy', 'UNITS': 'counts'}],
         f'pitch_angle':[np.array([np.nanmean(arr) for arr in PrimaryBeamFitToggles.pitch_angles_to_fit]),{'UNITS': 'degrees'}],
         f'energy':[fit_obj.energy,{'UNITS':'eV'}],
         f'epoch': [fit_obj.epoch, data_dict[f'{FitDataToggles.epoch_key}'][1].copy()],
@@ -98,61 +105,101 @@ def primary_beam_fit_generator():
     ########################################
     # --- PERFORM THE INVERTED-V FITTING ---
     ########################################
-    #
-    # for tmeIdx in tqdm(range(len(diffNFlux_tmeAvg))):
-    #
-    #     try:
-    #
-    #         diffNFlux_slice = diffNFlux_tmeAvg[tmeIdx]
-    #
-    #         # [1] find the acceleration potential from the peak in diffNFlux above an energy threshold
-    #         engy_thresh_idx = np.abs(energy-PrimaryBeamFitToggles.energy_thesh).argmin()
-    #         xData = energy[:engy_thresh_idx+1] if PrimaryBeamFitToggles.energy_bin_direction == 0 else energy[engy_thresh_idx:]
-    #         yData = diffNFlux_slice[:engy_thresh_idx+1] if PrimaryBeamFitToggles.energy_bin_direction == 0 else diffNFlux_slice[engy_thresh_idx:]
-    #
-    #         phi0_guess_idx = yData.argmax()
-    #         phi0_guess = xData[yData.argmax()]
-    #
-    #         # [2] collect the xData/yData for the fit above the energy threshold
-    #         # (a) Collect the data
-    #         xData_fit = xData[:phi0_guess_idx+1]
-    #         yData_fit = yData[:phi0_guess_idx+1]
-    #
-    #         # (b) Form the guesses/boundaries
-    #         fit_func, kwargs_dict = fit_obj.form_fit_params(phi0_guess)
-    #
-    #         # [3] Marquart-Levenburg Fitting
-    #         # (a) Fit the data
-    #         params, cov = curve_fit(fit_func, xData_fit, yData_fit, **kwargs_dict)
-    #
-    #         # (b) Calculate Chi2
-    #         std_devs = fit_obj.calc_jN_error(counts_val=counts_tmeAvg[tmeIdx][:phi0_guess_idx+1], energy_value=xData_fit, pitch_angles=pitch_angle)
-    #         chi2 = (1 / (len(params) - 1)) * sum([(fit_func(xData_fit[i], *params) - yData_fit[i]) ** 2 / (std_devs[i] ** 2) for i in range(len(xData_fit))])
-    #
-    #         # [4] Refine the fit using the kaeppler method
-    #
-    #         # [5] Store the results
-    #         # --- update the data_dict_output ---
-    #         data_dict_output['n'][0][tmeIdx] = params[0]
-    #         data_dict_output['Te'][0][tmeIdx] = params[1]
-    #         data_dict_output['phi'][0][tmeIdx] = params[2]
-    #         data_dict_output['kappa'][0][tmeIdx] = np.nan if PrimaryBeamToggles.fit_dist == 'maxwellian' else params[3]
-    #         data_dict_output['chi2'][0][tmeIdx] = chi2
-    #         data_dict_output['N_fitted_points'][0][tmeIdx] = len(yData_fit)
-    #         data_dict_output['find_fit_data_engy_idx'][0][tmeIdx] = phi0_guess_idx
-    #
-    #     except Exception as e:
-    #         print(e)
-    #         # --- update the data_dict_output ---
-    #         data_dict_output['Te'][0][tmeIdx] = np.nan
-    #         data_dict_output['n'][0][tmeIdx]= np.nan
-    #         data_dict_output['phi'][0][tmeIdx] = np.nan
-    #         data_dict_output['kappa'][0][tmeIdx] = np.nan
-    #         data_dict_output['chi2'][0][tmeIdx] = np.nan
-    #         data_dict_output['N_fitted_points'][0][tmeIdx] = np.nan
+
+    for tmeIdx in tqdm(range(len(data_dict_output['epoch'][0]))):
+        for ptchIdx in range(len(data_dict_output['pitch_angle'][0])):
+
+            try:
+
+                spectra_fit = data_dict_output['fitted_diffNFlux'][0][tmeIdx,:,ptchIdx].copy()
+                counts_fit = data_dict_output['fitted_counts'][0][tmeIdx,:,ptchIdx].copy()
+                energy_fit = data_dict_output['energy'][0].copy()
+
+
+                # --- [1] find the acceleration potential from the peak in diffNFlux above an energy threshold ---
+
+                # Reduce fitted data to that above energy threshold
+                engy_thresh_idx = np.abs(energy_fit-PrimaryBeamFitToggles.energy_thesh).argmin()
+                xData = energy_fit[:engy_thresh_idx+1]
+                yData = spectra_fit[:engy_thresh_idx+1]
+                countsData = counts_fit[:engy_thresh_idx+1]
+
+                # Remove any points where counts == 0
+                bad_idxs = np.where(countsData == 0)
+                xData = np.delete(xData,bad_idxs)
+                yData = np.delete(yData, bad_idxs)
+                countsData = np.delete(countsData,bad_idxs)
+
+                # check if number of fitted points >= N_fit_min:
+                if len(yData) < PrimaryBeamFitToggles.N_fit_min:
+                    raise Exception('Too Few Fit Points')
+
+                # Iterate: Find which choice of Phi0 gives the lowest Chi2 value:
+                chi2_min = np.inf
+                params_best = []
+                N_fit_best = 0
+
+                for i in range(len(yData) - PrimaryBeamFitToggles.N_fit_min):
+
+                    iter_idx = i +PrimaryBeamFitToggles.N_fit_min
+                    xData_iter = xData[:iter_idx]
+                    yData_iter = yData[:iter_idx]
+                    countsData_iter = countsData[:iter_idx]
+
+                    # estimate the initial guess for characteristic inverted-V energy via the peak in diffNFlux energy location
+                    phi0_guess_idx = yData_iter.argmax()
+                    phi0_guess = xData[yData_iter.argmax()]
+
+                    # Form the initial guesses/fitting function
+                    fit_func, kwargs_dict = fit_obj.form_fit_params(phi0_guess)
+
+                    # --- [2] Perform the Marquart-Levenburg Fit ---
+                    # Fit the data
+                    params, cov = curve_fit(fit_func, xData_iter, yData_iter, **kwargs_dict)
+
+                    # Calculate error in each datapoint
+                    std_devs = fit_obj.calc_jN_error(fit_counts=countsData_iter,
+                                                     fit_energies=xData_iter,
+                                                     pitch_idx = ptchIdx)
+
+                    # Calculate Chi2
+                    chi2 = (1 / (len(params) - 1)) * sum([(fit_func(xData_iter[i], *params) - yData_iter[i]) ** 2 / (std_devs[i] ** 2) for i in range(len(xData_iter))])
+
+                    if np.all([chi2<chi2_min, chi2>1E-3]):
+                        chi2_min = chi2
+                        params_best = params
+                        N_fit_best = len(xData_iter)
+
+                # [4] Refine the fit using the kaeppler method
+                # TODO
+
+                # [5] Store the results
+                n_fit = params_best[0]
+                Te_fit = params_best[1]
+                phi_fit =  params_best[2]
+                kappa_fit = np.nan if PrimaryBeamFitToggles.fit_dist == 'maxwellian' else params_best[3]
+                ch2_fit = chi2_min
+                N_fit =  N_fit_best
+
+            except Exception as e:
+                print(e)
+                n_fit = np.nan
+                Te_fit = np.nan
+                phi_fit = np.nan
+                kappa_fit = np.nan
+                ch2_fit = np.nan
+                N_fit = np.nan
+
+            # store the output
+            data_dict_output['n'][0][tmeIdx, ptchIdx] = n_fit
+            data_dict_output['Te'][0][tmeIdx, ptchIdx] = Te_fit
+            data_dict_output['phi'][0][tmeIdx, ptchIdx] = phi_fit
+            data_dict_output['kappa'][0][tmeIdx, ptchIdx] = kappa_fit
+            data_dict_output['chi2_goodness_of_fit'][0][tmeIdx, ptchIdx] = ch2_fit
+            data_dict_output['fitted_N_points'][0][tmeIdx, ptchIdx] = N_fit
 
     # --- --- --- --- --- ---
     # --- OUTPUT THE DATA ---
     # --- --- --- --- --- ---
-    outputPath = rf'{FileToggles.RUN_PATH}/primary_beam_fits/primary_beam_fit_T{PrimaryBeamFitToggles.start_hour}{PrimaryBeamFitToggles.start_minute}_to_T{PrimaryBeamFitToggles.end_hour}{PrimaryBeamFitToggles.end_minute}.cdf'
+    outputPath = rf'{FileToggles.RUN_PATH}/primary_beam_fits/primary_beam_fit_T{PrimaryBeamFitToggles.start_hour}{PrimaryBeamFitToggles.start_minute}{PrimaryBeamFitToggles.start_second}_to_{PrimaryBeamFitToggles.end_hour}{PrimaryBeamFitToggles.end_minute}{PrimaryBeamFitToggles.end_second}.cdf'
     stl.outputDataDict(outputPath=outputPath,data_dict=data_dict_output)
